@@ -13,9 +13,9 @@ following columns:
 
 1. Abbreviation: An abbreviation.
 2. Expansion: The expansion for the abbreviation.
-3. Categories: A space separated list of categories. Categories are limited to
-   - `common`: An abbreviation for everyday conversation.
-   - `stem`: An abbreviation for topics in Science, Technology, Engineering,
+3. Category: A category of the abbreviation. Categories are limited to
+   - `Common`: An abbreviation for everyday conversation.
+   - `STEM`: An abbreviation for topics in Science, Technology, Engineering,
       and Mathematics.
 
 Duplicate abbreviations are allowed. So, if an abbreviation can be expanded in
