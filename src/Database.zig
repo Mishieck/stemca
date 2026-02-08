@@ -30,8 +30,29 @@ pub fn destroy(self: *Self) void {
     self.arena.destroy(self);
 }
 
+pub fn matchAbbreviation(self: *const Self, abbr: []const u8) !RowSlice {
+    var list = std.ArrayList(*const Row){};
+    const upper_abbr = try stringToUpperCase(self.arena, abbr);
+
+    for (self.rows.items) |row| {
+        const row_abbr = row.get_abbreviation();
+        const row_upper_abbr = try stringToUpperCase(self.arena, row_abbr);
+        const is_match = mem.eql(u8, upper_abbr, row_upper_abbr);
+        if (is_match) try list.append(self.arena, row);
+    }
+
+    return list.items;
+}
+
+pub fn stringToUpperCase(allocator: mem.Allocator, string: []const u8) ![]const u8 {
+    var upper_abbr = try allocator.dupe(u8, string);
+    for (upper_abbr, 0..) |c, i| upper_abbr[i] = std.ascii.toUpper(c);
+    return upper_abbr;
+}
+
 pub const Separator = ',';
 pub const RowList = array_list.Managed(*Row);
+pub const RowSlice = []*const Row;
 
 pub const ListRowIterator = struct {
     pub const Iterator = RowIterator(Data);
@@ -136,6 +157,58 @@ test "Database.fromIterator" {
     try testing.expectEqualStrings("AKA", row.get_abbreviation());
 
     db.destroy();
+}
+
+test "Database.matchAbbreviation" {
+    var arena = heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const iterator = ListRowIterator.init(allocator, &.{
+        "Abbreviation,Expansion,Category",
+        "AI,Artificial Intelligence,STEM",
+        "AKA,Also Known As,Common",
+        "IoT,Internet of Things,STEM",
+        "STD,Standard,STEM",
+        "STD,Sexually Transmitted Disease,Common",
+    });
+
+    var db = try fromIterator(ListRowIterator.Data, allocator, iterator);
+    errdefer db.destroy();
+
+    const ai_expansion = "Artificial Intelligence";
+    const iot_expansion = "Internet of Things";
+
+    // Exact Match
+    try testMatchAbbreviation(db, "AI", &.{ai_expansion});
+
+    // Input Not Uppercase
+    try testMatchAbbreviation(db, "ai", &.{ai_expansion});
+
+    // Database Abbreviation Not Uppercase
+    try testMatchAbbreviation(db, "IoT", &.{iot_expansion});
+
+    // Input and Database Abbreviation Not Uppercase
+    try testMatchAbbreviation(db, "iot", &.{iot_expansion});
+
+    // Multiple Matches
+    const std_expansions = &.{ "Standard", "Sexually Transmitted Disease" };
+    try testMatchAbbreviation(db, "STD", std_expansions);
+
+    db.destroy();
+}
+
+fn testMatchAbbreviation(
+    db: *const Self,
+    abbr: []const u8,
+    matches: []const []const u8,
+) !void {
+    const rows = try db.matchAbbreviation(abbr);
+    try testing.expectEqual(matches.len, rows.len);
+
+    for (matches, 0..) |m, i| {
+        try testing.expectEqualStrings(m, rows[i].get_expansion());
+    }
 }
 
 test "Row.fromString" {
