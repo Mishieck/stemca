@@ -17,10 +17,9 @@ pub fn fromIterator(
 ) !*Self {
     const rows = try arena.create(RowList);
     rows.* = .init(arena);
-    _ = try iterator.next(arena, iterator.data); // Discard the headings
-    while (try iterator.next(arena, iterator.data)) |row| try rows.append(row);
     const self = try arena.create(Self);
     self.* = .{ .arena = arena, .rows = rows };
+    try self.mergeIterator(Data, iterator);
     return self;
 }
 
@@ -28,6 +27,17 @@ pub fn destroy(self: *Self) void {
     for (self.rows.items) |row| row.destroy(self.arena);
     self.arena.destroy(self.rows);
     self.arena.destroy(self);
+}
+
+pub fn mergeIterator(
+    self: *Self,
+    comptime Data: type,
+    iterator: RowIterator(Data),
+) !void {
+    _ = try iterator.next(self.arena, iterator.data); // Discard the table head
+    while (try iterator.next(self.arena, iterator.data)) |row| {
+        try self.rows.append(row);
+    }
 }
 
 pub fn matchAbbreviation(self: *const Self, abbr: []const u8) !RowSlice {
@@ -155,6 +165,43 @@ test "Database.fromIterator" {
 
     row = db.rows.getLast();
     try testing.expectEqualStrings("AKA", row.get_abbreviation());
+
+    db.destroy();
+}
+
+test "Database.mergeIterator" {
+    var arena = heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const common_list = [_][]const u8{
+        "Abbreviation,Expansion,Category",
+        "AKA,Also Known As,Common",
+        "RSVP,Please Respond,Common",
+    };
+
+    const stem_list = [_][]const u8{
+        "Abbreviation,Expansion,Category",
+        "AI,Artificial Intelligence,STEM",
+        "CAD,Computer-Aided Design,STEM",
+    };
+
+    const common_iterator = ListRowIterator.init(allocator, &common_list);
+    const stem_iterator = ListRowIterator.init(allocator, &stem_list);
+
+    var db = try fromIterator(ListRowIterator.Data, allocator, common_iterator);
+    errdefer db.destroy();
+
+    try db.mergeIterator(ListRowIterator.Data, stem_iterator);
+
+    const abbreviations = [_][]const u8{ "AKA", "RSVP", "AI", "CAD" };
+
+    try testing.expectEqual(4, db.rows.items.len);
+
+    for (abbreviations) |abbr| {
+        const rows = try db.matchAbbreviation(abbr);
+        try testing.expectEqual(1, rows.len);
+    }
 
     db.destroy();
 }
