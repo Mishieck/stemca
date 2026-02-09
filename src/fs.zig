@@ -46,10 +46,20 @@ pub fn createFileRowIterator(
 pub fn getNextLine(arena: mem.Allocator, data: *FileRowIteratorData) anyerror!?*Database.Row {
     var alloc_writer = std.Io.Writer.Allocating.init(arena);
     defer alloc_writer.deinit();
-    const written = try data.reader.interface.takeDelimiterExclusive('\n');
+    const written: ?[]const u8 = data.reader.interface.takeDelimiterExclusive('\n') catch null;
     var row: ?*Database.Row = null;
-    row = try Database.Row.fromString(arena, written);
+    if (written) |w| row = try Database.Row.fromString(arena, w);
     return row;
+}
+
+/// Replaces the URI path separator `/` with a native path separator. It
+/// modifies `uri_ref` in place.
+pub inline fn uriRefToNativePath(uri_ref: []const u8) []const u8 {
+    var buffer: [1024]u8 = undefined;
+    var native_path = buffer[0..];
+    mem.copyForwards(u8, native_path, uri_ref);
+    mem.replaceScalar(u8, native_path, '/', fs.path.sep);
+    return native_path[0..uri_ref.len];
 }
 
 test createFileRowIterator {

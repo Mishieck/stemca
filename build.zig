@@ -22,6 +22,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    try moveAssets(b, exe);
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
@@ -39,4 +40,17 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+}
+
+fn moveAssets(b: *std.Build, exe: *std.Build.Step.Compile) !void {
+    const assets_dir = "database";
+
+    const install_assets = b.addInstallDirectory(.{
+        .source_dir = b.path(assets_dir),
+        .install_dir = .bin,
+        .install_subdir = assets_dir,
+    });
+
+    install_assets.step.dependOn(&exe.step);
+    b.getInstallStep().dependOn(&install_assets.step);
 }

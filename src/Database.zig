@@ -4,6 +4,7 @@ const array_list = std.array_list;
 const testing = std.testing;
 const debug = std.debug;
 const heap = std.heap;
+const fmt = std.fmt;
 
 const Self = @This();
 
@@ -40,6 +41,7 @@ pub fn mergeIterator(
     }
 }
 
+// TODO: Change this to 'lookup'.
 pub fn matchAbbreviation(self: *const Self, abbr: []const u8) !RowSlice {
     var list = std.ArrayList(*const Row){};
     const upper_abbr = try stringToUpperCase(self.arena, abbr);
@@ -52,6 +54,18 @@ pub fn matchAbbreviation(self: *const Self, abbr: []const u8) !RowSlice {
     }
 
     return list.items;
+}
+
+pub fn toCsvTable(self: *const Self) ![]const u8 {
+    var rows = std.ArrayList(u8){};
+    try rows.appendSlice(self.arena, "Abbreviation,Expansion,Category\n");
+
+    for (self.rows.items) |row| try rows.appendSlice(
+        self.arena,
+        try row.toCsvRow(self.arena),
+    );
+
+    return rows.items;
 }
 
 pub fn stringToUpperCase(allocator: mem.Allocator, string: []const u8) ![]const u8 {
@@ -142,7 +156,91 @@ pub const Row = struct {
     pub fn get_category(self: *const Row) Cell {
         return self.array.items[2];
     }
+
+    /// Formats a row for displaying. Caller owns the memory.
+    pub fn format(self: *const Row, gpa: mem.Allocator) ![]const u8 {
+        const template =
+            \\Abbreviation: {s}
+            \\Expansion:    {s}
+            \\Category:     {s}
+            \\
+        ;
+
+        return try fmt.allocPrint(gpa, template, .{
+            self.get_abbreviation(),
+            self.get_expansion(),
+            self.get_category(),
+        });
+    }
+
+    /// Creates a CSV row with a newline at the end. Caller owns the memory.
+    pub fn toCsvRow(self: *const Row, gpa: mem.Allocator) ![]const u8 {
+        const string = try mem.join(gpa, ",", self.array.items);
+        defer gpa.free(string);
+        return try mem.concat(gpa, u8, &.{ string, "\n" });
+    }
+
+    /// Creates a Table row with a newline at the end. Caller owns the memory.
+    pub fn toTableRow(
+        self: *const Row,
+        gpa: mem.Allocator,
+        column_sizes: [3]usize,
+    ) ![]const u8 {
+        const table_row_template = "{s}{s}{s}{s}{s}\n";
+        const cells = self.array.items;
+
+        const first_colum_padding = try repeatString(
+            gpa,
+            " ",
+            column_sizes[0] - cells[0].len,
+        );
+        defer gpa.free(first_colum_padding);
+
+        const second_colum_padding = try repeatString(
+            gpa,
+            " ",
+            column_sizes[1] - cells[1].len,
+        );
+        defer gpa.free(second_colum_padding);
+
+        return try fmt.allocPrint(
+            gpa,
+            table_row_template,
+            .{
+                cells[0],
+                first_colum_padding,
+                cells[1],
+                second_colum_padding,
+                cells[2],
+            },
+        );
+    }
 };
+
+pub fn repeatString(
+    allocator: std.mem.Allocator,
+    original: []const u8,
+    times: usize,
+) ![]u8 {
+    const total_len = original.len * times;
+    const result = try allocator.alloc(u8, total_len);
+    var offset: usize = 0;
+
+    var i: usize = 0;
+    while (i < times) : (i += 1) {
+        @memcpy(result[offset .. offset + original.len], original);
+        offset += original.len;
+    }
+
+    return result;
+}
+
+test repeatString {
+    const allocator = testing.allocator;
+    const repeated = try repeatString(allocator, "abc", 3);
+    defer allocator.free(repeated);
+    try std.testing.expectEqualStrings("abcabcabc", repeated);
+}
 
 test "Database.fromIterator" {
     var arena = heap.ArenaAllocator.init(testing.allocator);
@@ -283,4 +381,58 @@ test "Row.fromArray" {
     try testing.expectEqualStrings(row.array.items[0], row.get_abbreviation());
     try testing.expectEqualStrings(row.array.items[1], row.get_expansion());
     try testing.expectEqualStrings(row.array.items[2], row.get_category());
+}
+
+test "Row.format" {
+    var arena = heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var array = Row.Array.init(allocator);
+    try array.appendSlice(&.{ "AKA", "Also Known As", "Common" });
+    var row = try Row.fromArray(allocator, array);
+    defer row.destroy(allocator);
+
+    const formatted = try row.format(allocator);
+
+    const expected =
+        \\Abbreviation: AKA
+        \\Expansion:    Also Known As
+        \\Category:     Common
+        \\
+    ;
+
+    try std.testing.expectEqualStrings(expected, formatted);
+}
+
+test "Row.toCsvRow" {
+    var arena = heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var array = Row.Array.init(allocator);
+    try array.appendSlice(&.{ "AKA", "Also Known As", "Common" });
+    var row = try Row.fromArray(allocator, array);
+    defer row.destroy(allocator);
+
+    const csv_row = try row.toCsvRow(allocator);
+    try std.testing.expectEqualStrings("AKA,Also Known As,Common\n", csv_row);
+}
+
+test "Row.toTableRow" {
+    var arena = heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var array = Row.Array.init(allocator);
+    try array.appendSlice(&.{ "AKA", "Also Known As", "Common" });
+    var row = try Row.fromArray(allocator, array);
+    defer row.destroy(allocator);
+
+    const table_row = try row.toTableRow(allocator, .{ 5, 15, 7 });
+
+    try std.testing.expectEqualStrings(
+        "AKA  Also Known As  Common\n",
+        table_row,
+    );
 }
