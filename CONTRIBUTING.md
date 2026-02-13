@@ -2,14 +2,14 @@
 
 ## Database
 
-The database for abbreviations is based on attribution. Every abbreviation
-added has a contributor. Each contributor can contribute more than one
-entry. Contributions are progressive. Each contributor manages their own
-entries. This means that a contributor can update their entries any time.
+The database is made up of tables of abbreviations. Each table is created by a
+contributor. A table is a CSV file. Contributions are progressive. Each
+contributor manages their own table. This means that a contributor can update
+their table at any time.
 
-To add abbreviations, create a file in [./database/contributions/](./database/contributions/).
-Use your github username for the filename. The file is a CSV file with the
-following columns:
+To add a table, create a file in [./database/tables/](./database/tables/).
+Use your github username for the filename. Your username is case-insensitive.
+So, `Mishieck` is the same as `mishieck`. The table has the following columns:
 
 1. Abbreviation: An abbreviation.
 2. Expansion: The expansion for the abbreviation.
@@ -18,19 +18,19 @@ following columns:
    - `STEM`: An abbreviation for topics in Science, Technology, Engineering,
       and Mathematics.
 
-Duplicate abbreviations are allowed. So, if an abbreviation can be expanded in
-multiple ways, you can add a separate entry for each expansion.
+An abbreviation with more than one expansion should have separate entries for
+each expansion.
 
-The contributions are compiled into [a single CSV file](./database/data.csv)
-with the same schema as a contributors file. The data file is generated
-everytime a contribution has been made. So, you have to run the command
-`devab update` in the root directory of the forked repo to make the update.
+You are not allowed to add an entry that someone else has already added. That
+is, an entry with the same abbreviation and expansion as someone else's entry.
+If your entry has a different expansion from someone else's, you can add it to
+your table. To check whether an entry exists or not, run
+`stemca lookup <abbreviation>`, where`<abbreviation>` is the abbreviation you
+are looking up.
 
-You are not allowed to add an entry that someone else has already made. An
-entry in this case means an abbreviation and its expansion. If your entry has a
-different expansion from someone else's, you can add it to your file. To check
-whether an entry exists or not, run `devab find <ABBREVIATION>`, where
-`<ABBREVIATION>` is the abbreviation you are looking up.
+You can verify that your contribution is valid by running the command
+`stemca verify` in the root directory of the forked repo. If there is anything
+wrong with your contribution, you will be notified.
 
 ## Branches
 
